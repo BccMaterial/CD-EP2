@@ -6,12 +6,12 @@ uri = ""
 user = ""
 password = ""
 
+#Conexão com o Neo4j:
+driver = GraphDatabase.driver(uri, auth=(user, password))
+
 #Leitura dos csv:
 movies_df = pd.read_csv("/csv/movies_amostra.csv")
 ratings_df = pd.read_csv("/csv/ratings_amostra.csv")
-
-#Conexão com o Neo4j:
-driver = GraphDatabase.driver(uri, auth=(user, password))
 
 #Modelagem do grafo:
 #Vértice "Usuário" com o atributo "userId"
@@ -29,7 +29,10 @@ def insert_movies(tx, movieId, title, genres): #Completar e verificar
   SET f.title = $title, f.genres = $genres
   """
 
-def criar_relacao_avaliacao():
+def criar_relacao_avaliacao(tx, user_id, movie_id, rating):
   query = """
-    
+    MATCH = (u:Usuario {user_id: $user_id})
+    MATCH = (f:Filme {movie_id: $movie_id})
+    Merge = (u) -[a:AVALIA]->(f)
+    SET a.rating = $rating 
     """
