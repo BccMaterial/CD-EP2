@@ -21,11 +21,11 @@ def insert_usuario(tx, userId): #Completar e verificar
 
 def insert_movies(tx, movieId, title, genres): #Completar e verificar
   query = """
-  MERGE(f:Filme {movieId: $movieId} )
+  MERGE(f:Filme {movieId: $movieId} ) 
   SET f.title = $title, f.genres = $genres
   """
 
-def criar_relacao_avaliacao(tx, user_id, movie_id, rating):
+def criar_relacao_avaliacao(tx, user_id, movie_id, rating): #Completar e verificar 
   query = """
     MATCH = (u:Usuario {user_id: $user_id})
     MATCH = (f:Filme {movie_id: $movie_id})
