@@ -14,7 +14,18 @@ driver = GraphDatabase.driver(env.db_uri, auth=(env.db_user, env.db_password))
 #Vértice "Filme" com os atributos "movieid", "title" e "genres"
 #Relação de "Usuário" para "Filme" chamada "Avaliação" com os atributos "rating" e "timestamp"
 
-#def insert_ratings(tx, userId, movieId, rating, timestamp):
+def insert_usuario(tx, userId): #Completar e verificar
+  query = """
+  MERGE(u:Usuario {userId: $userId}
+  """
 
+def insert_movies(tx, movieId, title, genres): #Completar e verificar
+  query = """
+  MERGE(f:Filme {movieId: $movieId} )
+  SET f.title = $title, f.genres = $genres
+  """
 
-#def insert_movies(tx, movieId, rating, timestamp):
+def criar_relacao_avaliacao():
+  query = """
+    
+    """
