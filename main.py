@@ -6,8 +6,8 @@ import env
 driver = GraphDatabase.driver(uri, auth=(user, password))
 
 #Leitura dos csv:
-movies_df = pd.read_csv("/csv/movies_amostra.csv")
-ratings_df = pd.read_csv("/csv/ratings_amostra.csv")
+movies_df = pd.read_csv("./csv/movies_amostra.csv")
+ratings_df = pd.read_csv("./csv/ratings_amostra.csv")
 
 #Modelagem do grafo:
 #Vértice "Usuário" com o atributo "userId"
@@ -36,12 +36,16 @@ def criar_relacao_avaliacao(tx, userId, movieId, rating, timestamp): #Completar 
     """
   tx.run(query, userId=userId, movieId=movieId, rating=rating, timestamp=timestamp)
 
-  #Inserções:
+#Inserções:
+with driver.session() as session: #driver.session() é o objeto utilizado para realizar queries no banco de dados
+  for _, row in movies_df.iterrows(): #row é uma linha do csv convertida em uma Series do pandas
+    session.execute_write(insert_movie, row["movieId"], row["title"], row["genres"])
 
-  with driver.session() as session: #driver.session() é o objeto utilizado para realizar queries no banco de dados
-    #Inserção dos filmes:
-    for i, row in movies_df.iterrows():
-      session.execute_write(insert_movie, row["movieId"], row["tile"], row["genres"])
-      
-    #Inserção de usuário e relações:
+#Inserção de usuário e relações:
+  for _, row in ratings_df.itemarrows():
+    session.execute_write(insert_usuario, row["userId"]) #inserção do usuário
 
+    session.execute_write(criar_relacao_avaliacao, row["userId"], row["movieId"], row["rating"], row["timestamp"])
+
+driver.close()
+print("Inserção concluída.")
