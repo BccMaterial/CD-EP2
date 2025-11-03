@@ -1,6 +1,10 @@
 from neo4j import GraphDatabase
 import pandas as pd
-import env
+
+#Configuração Neo4j:
+uri = "bolt://localhost:7687"
+user = "neo4j"
+password = "senac_celso"
 
 #Conexão com o Neo4j:
 driver = GraphDatabase.driver(uri, auth=(user, password))
@@ -27,20 +31,27 @@ def insert_movie(tx, movieId, title, genres): #Completar e verificar
   """
   tx.run(query, movieId=movieId, title=title, genres=genres)
 
-def criar_relacao_avaliacao(tx, userId, movieId, rating, timestamp): #Completar e verificar
+
+def criar_relacao_avaliacao(tx, userId, movieId, rating, timestamp):
   query = """
-    MATCH (u:Usuario {userId: $userId})
-    MATCH (f:Filme {movieId: $movieId})
-    MERGE (u) -[a:AVALIA]->(f)
-    SET a.rating = $rating, a.timestamp = $timestamp
-    """
-  tx.run(query, userId=userId, movieId=movieId, rating=rating, timestamp=timestamp)
+  MATCH (u:Usuario {userId: $userId})
+  MATCH (f:Filme {movieId: $movieId})
+  WITH u, f
+  MERGE (u)-[a:AVALIA]->(f)
+  SET a.rating = $rating, a.timestamp = $timestamp
+  RETURN u.userId AS u_id, f.movieId AS f_id
+  """
+  result = tx.run(query, userId=userId, movieId=movieId, rating=rating, timestamp=timestamp)
 
 #Inserções:
-with driver.session() as session: #driver.session() é o objeto utilizado para realizar queries no banco de dados
-  for _, row in movies_df.iterrows(): #row é uma linha do csv convertida em uma Series do pandas
-    session.execute_write(insert_movie, row["movieId"], row["title"], row["genres"])
+with driver.session() as session:
+  # Inserindo filmes
+  for _, row in movies_df.iterrows():
+    movie_id = int(row["movieId"])
+    title = row["title"]
+    genres = row["genres"]
 
+    session.execute_write(insert_movie, movie_id, title, genres)
 #Inserção de usuário e relações:
   for _, row in ratings_df.iterrows():
     session.execute_write(insert_usuario, row["userId"]) #inserção do usuário
