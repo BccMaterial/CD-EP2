@@ -31,7 +31,7 @@ def criar_relacao_avaliacao(tx, userId, movieId, rating, timestamp): #Completar 
   query = """
     MATCH (u:Usuario {userId: $userId})
     MATCH (f:Filme {movieId: $movieId})
-    Merge (u) -[a:AVALIA]->(f)
+    MERGE (u) -[a:AVALIA]->(f)
     SET a.rating = $rating, a.timestamp = $timestamp
     """
   tx.run(query, userId=userId, movieId=movieId, rating=rating, timestamp=timestamp)
