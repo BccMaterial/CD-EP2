@@ -29,9 +29,9 @@ def insert_movie(tx, movieId, title, genres): #Completar e verificar
 
 def criar_relacao_avaliacao(tx, userId, movieId, rating, timestamp): #Completar e verificar
   query = """
-    MATCH = (u:Usuario {userId: $userId})
-    MATCH = (f:Filme {movieId: $movieId})
-    Merge = (u) -[a:AVALIA]->(f)
+    MATCH (u:Usuario {userId: $userId})
+    MATCH (f:Filme {movieId: $movieId})
+    Merge (u) -[a:AVALIA]->(f)
     SET a.rating = $rating, a.timestamp = $timestamp
     """
   tx.run(query, userId=userId, movieId=movieId, rating=rating, timestamp=timestamp)
@@ -42,9 +42,8 @@ with driver.session() as session: #driver.session() é o objeto utilizado para r
     session.execute_write(insert_movie, row["movieId"], row["title"], row["genres"])
 
 #Inserção de usuário e relações:
-  for _, row in ratings_df.itemarrows():
+  for _, row in ratings_df.iterrows():
     session.execute_write(insert_usuario, row["userId"]) #inserção do usuário
-
     session.execute_write(criar_relacao_avaliacao, row["userId"], row["movieId"], row["rating"], row["timestamp"])
 
 driver.close()
