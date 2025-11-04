@@ -73,6 +73,26 @@ revocacao = recall_score(real_bin, pred_bin)
 print("Precisão:", round(precisao, 3))
 print("Recall:", round(revocacao, 3))
 
+
+def recomendar_filmes(user_id, ratings_matrix, correlation_matrix, n=5, k_vizinhos=5):
+  user_ratings = ratings_matrix.loc[user_id]
+  filmes_nao_vistos = user_ratings[user_ratings == 0].index
+
+  predicoes = {}
+  for movie_id in filmes_nao_vistos:
+    nota_pred = prever_nota(user_id, movie_id, ratings_matrix, correlation_matrix, k=k_vizinhos)
+    if not np.isnan(nota_pred):
+      predicoes[movie_id] = nota_pred
+
+  top_filmes = sorted(predicoes.items(), key=lambda x: x[1], reverse=True)[:n]
+  return top_filmes
+
+print("\n Top-5 filmes recomendados para o usuário 1:")
+recomendados = recomendar_filmes(1, ratings_matrix, correlation_matrix, n=5, k_vizinhos=5)
+for movie_id, score in recomendados:
+  print(f"Filme {movie_id} com nota prevista: {round(score, 2)}")
+
+
 def exportar_correlacoes_neo4j(correlation_matrix, uri, user, password, limite=100):
     driver = GraphDatabase.driver(uri, auth=(user, password))
     with driver.session() as session:
@@ -94,11 +114,3 @@ def exportar_correlacoes_neo4j(correlation_matrix, uri, user, password, limite=1
                 break
     driver.close()
     print(f"{count} correlações exportadas ao Neo4j.")
-
-# Exemplo de uso (descomente se quiser exportar)
-# exportar_correlacoes_neo4j(correlation_matrix,
-#     uri="bolt://localhost:7687",
-#     user="neo4j",
-#     password="1234",
-#     limite=200
-# )
