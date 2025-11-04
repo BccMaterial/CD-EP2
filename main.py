@@ -1,84 +1,104 @@
 import pandas as pd
+import numpy as np
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import precision_score, recall_score
 from neo4j import GraphDatabase
 
-#Caminho para CSVs locais
-pasta_neo4j = "./csv/"  #Ajuste para onde os CSVs estão no seu computador
+ratings_df = pd.read_csv("./csv/ratings_amostra.csv")
 
-#Ler CSVs com parsing robusto
-movies_df = pd.read_csv(
-    pasta_neo4j + "movies_amostra.csv",
-    sep=",",
-    quotechar='"',
-    engine="python",
-    skipinitialspace=True,
-    encoding="utf-8",
-    on_bad_lines='skip'  #ignora linhas mal formatadas
-)
+#Divisão dos dados em treino e teste
+train_df, test_df = train_test_split(ratings_df, test_size=0.2, random_state=42)
 
-ratings_df = pd.read_csv(
-    pasta_neo4j + "ratings_amostra.csv",
-    sep=",",
-    quotechar='"',
-    engine="python",
-    skipinitialspace=True,
-    encoding="utf-8",
-    on_bad_lines='skip'
-)
+#Criaçã da matriz usuário x filme
+ratings_matrix = train_df.pivot_table(index='userId', columns='movieId', values='rating')
+ratings_matrix = ratings_matrix.fillna(0)
 
-#Limpeza e conversão de tipos
-#Filtrar filmes com movieId ou title nulos
-movies_df = movies_df.dropna(subset=['movieId', 'title'])
-movies_df['movieId'] = movies_df['movieId'].astype(int)
-movies_df['title'] = movies_df['title'].astype(str)
-movies_df['genres'] = movies_df['genres'].fillna('').astype(str)
+#Correlação de Perason entre filmes
+correlation_matrix = ratings_matrix.corr(method='pearson')
 
-#Filtrar ratings inválidos
-ratings_df = ratings_df.dropna(subset=['userId', 'movieId', 'rating'])
-ratings_df['userId'] = ratings_df['userId'].astype(int)
-ratings_df['movieId'] = ratings_df['movieId'].astype(int)
-ratings_df['rating'] = ratings_df['rating'].astype(float)
-ratings_df['timestamp'] = ratings_df['timestamp'].astype(int)
+#Utiliza KNN regreção
+def prever_nota(user_id, movie_id, ratings_matrix, correlation_matrix, k=5):
+    if movie_id not in correlation_matrix.columns:
+        return np.nan
 
-#Conferir dados
-print("Filmes:")
-print(movies_df.head())
-print("\nRatings:")
-print(ratings_df.head())
+    user_ratings = ratings_matrix.loc[user_id]
+    user_rated_movies = user_ratings[user_ratings > 0].index
 
-#Conexão Neo4j local
-uri = "bolt://localhost:7687"  # seu Neo4j local
-user = "neo4j"                 # usuário do Neo4j local
-password = "senac_celso"       # senha do Neo4j local
-driver = GraphDatabase.driver(uri, auth=(user, password))
+    if len(user_rated_movies) == 0:
+        return np.nan
 
-#Inserção usando UNWIND
-with driver.session() as session:
+    similaridades = correlation_matrix[movie_id].dropna()
+    similaridades = similaridades[user_rated_movies]
+    if similaridades.empty:
+        return np.nan
 
-    #Inserir filmes
-    filmes_lista = movies_df.to_dict('records')
-    session.run("""
-    UNWIND $filmes AS f
-    MERGE (m:Filme {movieId: toInteger(f.movieId)})
-    SET m.title = f.title, m.genres = f.genres
-    """, filmes=filmes_lista)
+    similaridades = similaridades.sort_values(ascending=False)[:k]
 
-    #Inserir usuários
-    usuarios_lista = ratings_df['userId'].drop_duplicates().tolist()
-    usuarios_dict = [{'userId': int(u)} for u in usuarios_lista]
-    session.run("""
-    UNWIND $usuarios AS u
-    MERGE (usr:Usuario {userId: toInteger(u.userId)})
-    """, usuarios=usuarios_dict)
+    numerador = (similaridades * user_ratings[similaridades.index]).sum()
+    denominador = similaridades.abs().sum()
 
-    #Inserir relações Avaliacao
-    avaliacoes_lista = ratings_df.to_dict('records')
-    session.run("""
-    UNWIND $avaliacoes AS a
-    MATCH (u:Usuario {userId: toInteger(a.userId)})
-    MATCH (f:Filme {movieId: toInteger(a.movieId)})
-    MERGE (u)-[r:AVALIA]->(f)
-    SET r.rating = toFloat(a.rating), r.timestamp = toInteger(a.timestamp)
-    """, avaliacoes=avaliacoes_lista)
+    if denominador == 0:
+        return np.nan
+    return numerador / denominador
 
-driver.close()
-print("Inserção concluída!")
+#Previsão nos dados de teste
+previsoes = []
+reais = []
+
+for _, row in test_df.iterrows():
+    user_id = row['userId']
+    movie_id = row['movieId']
+    real = row['rating']
+
+    if user_id not in ratings_matrix.index:
+        continue
+
+    pred = prever_nota(user_id, movie_id, ratings_matrix, correlation_matrix)
+    if not np.isnan(pred):
+        previsoes.append(pred)
+        reais.append(real)
+
+previsoes = np.array(previsoes)
+reais = np.array(reais)
+
+#Avalia a partir de Precisão e Recall
+#Notas >= 3.5 são convertidas em "gostou" ou "não gostou"
+threshold = 3.5
+pred_bin = (previsoes >= threshold).astype(int)
+real_bin = (reais >= threshold).astype(int)
+
+precisao = precision_score(real_bin, pred_bin)
+revocacao = recall_score(real_bin, pred_bin)
+
+print("Precisão:", round(precisao, 3))
+print("Recall:", round(revocacao, 3))
+
+def exportar_correlacoes_neo4j(correlation_matrix, uri, user, password, limite=100):
+    driver = GraphDatabase.driver(uri, auth=(user, password))
+    with driver.session() as session:
+        count = 0
+        for i in correlation_matrix.columns:
+            for j in correlation_matrix.columns:
+                if i != j and not pd.isna(correlation_matrix.loc[i, j]):
+                    corr = float(correlation_matrix.loc[i, j])
+                    session.run("""
+                    MATCH (f1:Filme {movieId: $i})
+                    MATCH (f2:Filme {movieId: $j})
+                    MERGE (f1)-[r:CORRELACIONADO_COM]->(f2)
+                    SET r.c = $corr
+                    """, i=int(i), j=int(j), corr=corr)
+                    count += 1
+                    if count >= limite:
+                        break
+            if count >= limite:
+                break
+    driver.close()
+    print(f"{count} correlações exportadas ao Neo4j.")
+
+# Exemplo de uso (descomente se quiser exportar)
+# exportar_correlacoes_neo4j(correlation_matrix,
+#     uri="bolt://localhost:7687",
+#     user="neo4j",
+#     password="1234",
+#     limite=200
+# )
